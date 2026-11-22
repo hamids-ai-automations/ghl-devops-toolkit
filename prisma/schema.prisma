@@ -1,0 +1,252 @@
+// GHL DevOps Toolkit - Prisma Schema
+// SQLite datasource for local developer toolkit
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// GHL Connections - Manage multiple GoHighLevel API integrations
+// ============================================================
+model GhlConnection {
+  id            String   @id @default(cuid())
+  name          String
+  locationId    String
+  authType      String   // "oauth" | "private_token"
+  accessToken   String   // stored (demo: plaintext; prod: encrypt)
+  refreshToken  String?
+  tokenExpiresAt DateTime?
+  apiVersion    String   @default("2021-07-07")
+  scopes        String?
+  status        String   @default("active") // "active" | "expired" | "error" | "demo"
+  lastVerifiedAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  apiRequests   ApiRequest[]
+  webhookEvents WebhookEvent[]
+  workflowRuns  WorkflowRun[]
+  testRuns      TestRun[]
+  healthChecks  HealthCheck[]
+  auditLogs     AuditLog[]
+}
+
+// ============================================================
+// API Explorer - Request history & saved requests
+// ============================================================
+model ApiRequest {
+  id            String   @id @default(cuid())
+  connectionId  String
+  method        String   // GET, POST, PUT, DELETE, PATCH
+  endpoint      String
+  headers       String   // JSON string
+  body          String?
+  queryParams   String?  // JSON string
+  statusCode    Int?
+  responseHeaders String? // JSON string
+  responseBody  String?
+  durationMs    Int?
+  status        String   @default("pending") // pending, success, error
+  errorMessage  String?
+  isSaved       Boolean  @default(false)
+  savedName     String?
+  createdAt     DateTime @default(now())
+
+  connection    GhlConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// Webhook Inspector - Captured webhook events
+// ============================================================
+model WebhookEvent {
+  id            String   @id @default(cuid())
+  connectionId  String?
+  endpoint      String   // the generated capture URL slug
+  eventType     String   // e.g. "LeadCreated", "ContactUpdated"
+  headers       String   // JSON string
+  body          String   // raw body
+  parsedBody    String?  // pretty JSON
+  signature     String?
+  signatureValid Boolean?
+  sourceIp      String?
+  replayCount   Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  connection    GhlConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+}
+
+// ============================================================
+// Workflow Simulator - Simulated lead journeys
+// ============================================================
+model WorkflowSim {
+  id            String   @id @default(cuid())
+  name          String
+  scenario      String   // new_lead, contact_updated, stage_changed, appointment_booked, etc.
+  contactPayload String  // JSON sample contact
+  expectedSteps String   // JSON array of expected steps
+  executedSteps String?  // JSON array of executed steps
+  status        String   @default("draft") // draft, passed, failed, partial
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model WorkflowRun {
+  id            String   @id @default(cuid())
+  simulationId  String
+  connectionId  String?
+  scenario      String
+  contactPayload String
+  executedSteps String
+  result        String   // passed, failed, partial
+  durationMs    Int?
+  simulated     Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  connection    GhlConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+}
+
+// ============================================================
+// Automation Testing Engine - Test suites & runs
+// ============================================================
+model TestCase {
+  id            String   @id @default(cuid())
+  suiteId       String?
+  name          String
+  description   String?
+  inputPayload  String   // JSON
+  expectedOutput String?  // JSON
+  assertions    String   // JSON array of assertion objects
+  tags          String?  // comma separated
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model TestSuite {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model TestRun {
+  id            String   @id @default(cuid())
+  caseId        String?
+  suiteId       String?
+  connectionId  String?
+  name          String
+  status        String   // passed, failed, skipped, error
+  assertionsRun Int      @default(0)
+  assertionsPassed Int   @default(0)
+  failures      String?  // JSON array of failure objects
+  durationMs    Int?
+  output        String?
+  simulated     Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  connection    GhlConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+}
+
+// ============================================================
+// Snapshot Validator - GHL snapshot exports validation results
+// ============================================================
+model SnapshotReport {
+  id            String   @id @default(cuid())
+  fileName      String
+  fileSize      Int
+  snapshotJson  String   // raw parsed JSON
+  summary       String   // JSON summary of counts
+  issues        String   // JSON array of issues found
+  status        String   @default("valid") // valid, warnings, invalid
+  importReady   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+}
+
+// ============================================================
+// AI Debugger - Conversation & analysis logs
+// ============================================================
+model AiSession {
+  id            String   @id @default(cuid())
+  title         String
+  model         String   @default("gemini-default")
+  context       String?  // optional context JSON
+  messages      String   // JSON array of {role, content, timestamp}
+  tokenUsage    Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ============================================================
+// Integration Monitor - Health checks & metrics
+// ============================================================
+model HealthCheck {
+  id            String   @id @default(cuid())
+  connectionId  String
+  endpoint      String
+  method        String   @default("GET")
+  statusCode    Int?
+  responseTimeMs Int?
+  ok            Boolean  @default(false)
+  errorMessage  String?
+  checkedAt     DateTime @default(now())
+
+  connection    GhlConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+}
+
+model AlertConfig {
+  id            String   @id @default(cuid())
+  name          String
+  type          String   // "error_rate", "latency", "webhook_failure"
+  threshold     Float
+  enabled       Boolean  @default(true)
+  lastTriggered DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ============================================================
+// Reports - Generated technical reports
+// ============================================================
+model Report {
+  id            String   @id @default(cuid())
+  title         String
+  type          String   // api_diagnostics, testing_results, webhook_history, integration_health, full_summary
+  format        String   @default("html") // html, json, csv, pdf
+  content       String   // generated report content
+  summary       String?  // short summary
+  metadata      String?  // JSON metadata
+  createdAt     DateTime @default(now())
+}
+
+// ============================================================
+// Settings - Toolkit configuration
+// ============================================================
+model Setting {
+  id    String @id
+  key   String @unique
+  value String
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================
+// Audit Log - Security & action tracking
+// ============================================================
+model AuditLog {
+  id            String   @id @default(cuid())
+  action        String   // e.g. "connection.create", "webhook.replay", "test.run"
+  actor         String   @default("system")
+  resourceType  String?
+  resourceId    String?
+  connectionId  String?
+  details       String?  // JSON
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+
+  connection    GhlConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+}

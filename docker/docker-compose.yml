@@ -1,0 +1,23 @@
+# GHL DevOps Toolkit - Docker Compose
+# Run: docker compose up --build
+
+version: "3.9"
+
+services:
+  toolkit:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ghl-devops-toolkit
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/db/custom.db
+      - DEMO_MODE=true
+    volumes:
+      - toolkit-data:/app/db
+    restart: unless-stopped
+
+volumes:
+  toolkit-data:
